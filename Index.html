@@ -1,0 +1,1567 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+   <meta charset="UTF-8">
+   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+   <title>Interaktivt Eventyr: Gojo, Sukuna og det Store Hav</title>
+   <script src="https://cdn.tailwindcss.com"></script>
+   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+   <!-- Firebase SDKs -->
+   <script type="module">
+       import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+       import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+       import { getFirestore, doc, getDoc, setDoc, collection, addDoc, onSnapshot, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+       const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+       const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+       const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+       // Initialiser Firebase app med det samme
+       const app = initializeApp(firebaseConfig);
+       const auth = getAuth(app);
+       const db = getFirestore(app);
+
+       // Eksponer Firebase objekter globalt for React script
+       window.firebase = {
+           app, auth, db,
+           initializeApp, getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged,
+           getFirestore, doc, getDoc, setDoc, collection, addDoc, onSnapshot, query, orderBy, limit
+       };
+       window.appId = appId;
+       window.firebaseConfig = firebaseConfig;
+       window.initialAuthToken = initialAuthToken;
+
+       // Håndter initial autentificering og sæt global klar-flag
+       onAuthStateChanged(auth, async (user) => {
+           if (!user) { // Hvis ingen bruger er autentificeret endnu
+               if (initialAuthToken) {
+                   await signInWithCustomToken(auth, initialAuthToken);
+               } else {
+                   await signInAnonymously(auth);
+               }
+           }
+           // Sæt global userId efter at auth-tilstanden er bestemt
+           window.firebase.userId = auth.currentUser?.uid || crypto.randomUUID();
+           window.firebase.isReady = true; // Sæt et flag for React til at vide, at Firebase er klar
+           console.log("Firebase initialiseret og auth-tilstand bestemt. Bruger ID:", window.firebase.userId);
+           document.dispatchEvent(new CustomEvent('firebaseReady')); // Send event til React
+       });
+   </script>
+   <!-- PDF Generation Libraries -->
+   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+   <link rel="preconnect" href="https://fonts.googleapis.com">
+   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+   <link href="https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;600;700&family=Bangers&display=swap" rel="stylesheet">
+   <!-- Chosen Palette: Seaside Serenity -->
+   <!-- Application Structure Plan: App'en er nu en React SPA, der bevarer den interaktive kortstruktur over "Stjerneøhavet". Brugeren starter med en introduktion, navigerer via klikbare markører på kortet for at åbne kapitelpaneler. Hvert kapitel har sekventielle sektioner med tekst og visualiseringer, der afsløres via en "Næste"-knap. En "Skab Dit Eget Eventyr"-funktion giver brugeren mulighed for at tilpasse og generere nye kapitler, som gemmes i Firestore og tilføjes dynamisk til kortet. React-komponenter er brugt til at modularisere UI og logik, hvilket forbedrer vedligeholdelse og ydeevne. Firebase håndterer datalagring af brugerdefinerede kapitler og progression. -->
+   <!-- Visualization & Content Choices: Visualiseringerne er valgt for at understøtte kapitlets tema og opdateres dynamisk. Doughnut-diagrammer viser progression (mod, koralrevsfarver). Interaktive knapper simulerer valg (Skyggeøen). Enkel tekstboks med ikoner giver information (Magisk Kompas). Søjlediagrammer sammenligner værdier (Største Skat). Alle visualiseringer er implementeret med Chart.js eller ren HTML/CSS/JS inden for React-komponenter. Unicode-ikoner bruges til visuel identifikation. Animationer i anime/manga-stil (f.eks. fade-ins, pops, slides) er tilføjet for at forbedre engagement og visuel appel. -->
+   <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+   <style>
+       body {
+           font-family: 'Nunito Sans', sans-serif;
+           overflow-x: hidden; /* Forhindrer vandret scrolling på hele siden */
+       }
+       .bg-sea-sand { background-color: #F4F1DE; }
+       .bg-sea-water { background-color: #E0F7FA; }
+       .text-sea-deep { color: #003B46; }
+       .text-sea-coral { color: #E94F37; }
+       .btn-coral {
+           background-color: #E94F37;
+           color: white;
+           border: 2px solid black; /* Added black border */
+       }
+       .btn-coral:hover { background-color: #d8452e; transform: translateY(-2px); box-shadow: 0 6px 10px rgba(0,0,0,0.2); }
+       .btn-coral:active { transform: translateY(0); box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+       .btn-ocean {
+           background-color: #07575B;
+           color: white;
+           border: 2px solid black; /* Added black border */
+       }
+       .btn-ocean:hover { background-color: #064a4d; transform: translateY(-2px); box-shadow: 0 6px 10px rgba(0,0,0,0.2); }
+       .btn-ocean:active { transform: translateY(0); box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+       
+       /* Roblox-style buttons */
+       .roblox-btn {
+           background-color: #00A2FF; /* Roblox blue */
+           color: white;
+           font-family: 'Bangers', cursive;
+           font-size: 1.5rem;
+           padding: 1rem 2rem;
+           border-radius: 12px; /* Lidt afrundede, blok-agtige hjørner */
+           border: 4px solid black; /* Mørkere blå kant */
+           box-shadow: 0 8px 0 black, 0 12px 15px rgba(0,0,0,0.3); /* Stablet skygge for dybde */
+           transition: all 0.1s ease-in-out;
+           cursor: pointer;
+           text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+           letter-spacing: 1px;
+       }
+       .roblox-btn:hover {
+           transform: translateY(-2px);
+           box-shadow: 0 10px 0 black, 0 14px 18px rgba(0,0,0,0.4);
+       }
+       .roblox-btn:active {
+           transform: translateY(4px);
+           box-shadow: 0 4px 0 black, 0 6px 8px rgba(0,0,0,0.2);
+       }
+       .roblox-btn.green {
+           background-color: #00E676; /* Roblox green */
+           border-color: black;
+           box-shadow: 0 8px 0 black, 0 12px 15px rgba(0,0,0,0.3);
+       }
+       .roblox-btn.green:hover {
+           box-shadow: 0 10px 0 black, 0 14px 18px rgba(0,0,0,0.4);
+       }
+       .roblox-btn.green:active {
+           box-shadow: 0 4px 0 black, 0 6px 8px rgba(0,0,0,0.2);
+       }
+       .roblox-btn.red {
+           background-color: #FF3D00; /* Roblox red */
+           border-color: black;
+           box-shadow: 0 8px 0 black, 0 12px 15px rgba(0,0,0,0.3);
+       }
+       .roblox-btn.red:hover {
+           box-shadow: 0 10px 0 black, 0 14px 18px rgba(0,0,0,0.4);
+       }
+       .roblox-btn.red:active {
+           box-shadow: 0 4px 0 black, 0 6px 8px rgba(0,0,0,0.2);
+       }
+
+       #main-app {
+           flex-grow: 1;
+           position: relative;
+           width: 100%;
+           height: 100vh; /* Sørg for, at den fylder hele viewport-højden */
+           overflow: hidden; /* Hold kortet selv fra at rulle */
+           display: flex;
+           flex-direction: column;
+       }
+
+       #map-container {
+           background-image: url('https://placehold.co/1200x800/E0F7FA/003B46?text=Stjerne%C3%B8havet');
+           background-size: cover;
+           background-position: center;
+           width: 100%;
+           height: 100%;
+           position: absolute; /* Sørg for at den dækker hele main-app */
+           top: 0;
+           left: 0;
+       }
+       .map-marker {
+           transform: translate(-50%, -50%) scale(1);
+           transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), background-color 0.2s ease-in-out;
+           box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+       }
+       .map-marker:hover {
+           transform: translate(-50%, -50%) scale(1.2);
+           box-shadow: 0 8px 12px rgba(0, 0, 0, 0.2);
+       }
+       .chapter-panel, .customize-panel, .full-adventure-panel {
+           transform: translateX(100%);
+           opacity: 0;
+           transition: transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.5s ease-in-out;
+           overflow-y: auto; /* Eksplicit sikring af lodret scrolling for paneler */
+           -webkit-overflow-scrolling: touch; /* For jævn scrolling på iOS */
+       }
+       .chapter-panel.is-open, .customize-panel.is-open, .full-adventure-panel.is-open {
+           transform: translateX(0);
+           opacity: 1;
+       }
+       .chart-container {
+           position: relative;
+           margin: auto;
+           height: 250px; /* Fast højde for konsistens, responsiv bredde */
+           width: 100%; /* Tag fuld bredde af forælder */
+       }
+       .icon-large {
+           font-size: 3rem;
+           line-height: 1;
+           margin-bottom: 1rem;
+       }
+       .path-choice-btn {
+           transition: background-color 0.3s ease, transform 0.1s ease;
+           transform: scale(1);
+       }
+       .path-choice-btn:active {
+           transform: scale(0.95);
+       }
+       .path-choice-btn.selected {
+           transform: scale(1.05);
+           border: 2px solid #E94F37;
+       }
+       .path-choice-btn.correct {
+           background-color: #28a745;
+       }
+       .path-choice-btn.incorrect {
+           background-color: #dc3545;
+       }
+       #luca-avatar {
+           transform: translateY(0);
+           animation: float 3s ease-in-out infinite;
+           transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+       }
+       #luca-avatar:hover {
+           transform: scale(1.05) translateY(-5px);
+           box-shadow: 0 8px 15px rgba(0, 0, 0, 0.3);
+       }
+       @keyframes float {
+           0% { transform: translateY(0px); }
+           50% { transform: translateY(-5px); }
+           100% { transform: translateY(0px); }
+       }
+       #avatar-message {
+           opacity: 0;
+           transform: translateY(10px);
+           transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
+       }
+       #avatar-message.is-visible {
+           opacity: 1;
+           transform: translateY(0);
+       }
+       #background-canvas {
+           position: fixed;
+           top: 0;
+           left: 0;
+           width: 100%;
+           height: 100%;
+           z-index: -2;
+       }
+       #dynamic-wallpaper {
+           position: fixed;
+           top: 0;
+           left: 0;
+           width: 100%;
+           height: 100%;
+           z-index: -1;
+           display: flex;
+           align-items: center;
+           justify-content: center;
+           text-align: center;
+           opacity: 0;
+           transition: opacity 1s ease-in-out;
+       }
+       #wallpaper-image {
+           position: absolute;
+           top: 0;
+           left: 0;
+           width: 100%;
+           height: 100%;
+           object-fit: cover;
+           filter: brightness(60%) blur(2px);
+       }
+       #wallpaper-quote-container {
+           position: relative;
+           z-index: 1;
+           background-color: rgba(0, 0, 0, 0.5);
+           padding: 1.5rem;
+           border-radius: 0.75rem;
+           max-width: 80%;
+           box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+           transform: scale(0.9);
+           animation: pop-in 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+       }
+       #wallpaper-quote {
+           font-family: 'Bangers', cursive; /* Anime/Manga style font */
+           color: white;
+           font-size: 1.5rem;
+           font-weight: bold;
+           font-style: italic;
+           text-shadow: 2px 2px 4px rgba(0,0,0,0.7);
+       }
+       @media (min-width: 768px) {
+           #wallpaper-quote {
+               font-size: 2.5rem;
+           }
+       }
+       .loader {
+           border: 4px solid #f3f3f3;
+           border-top: 4px solid #E94F37;
+           border-radius: 50%;
+           width: 40px;
+           height: 40px;
+           animation: spin 1s linear infinite;
+           margin: 20px auto;
+       }
+       @keyframes spin {
+           0% { transform: rotate(0deg); }
+           100% { transform: rotate(360deg); }
+       }
+       @keyframes pop-in {
+           0% { transform: scale(0.5); opacity: 0; }
+           100% { transform: scale(1); opacity: 1; }
+       }
+       .fade-in {
+           opacity: 0;
+           animation: fadeIn 0.5s ease-in forwards;
+       }
+       @keyframes fadeIn {
+           from { opacity: 0; }
+           to { opacity: 1; }
+       }
+       .image-gallery {
+           display: grid;
+           grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); /* Responsivt grid */
+           gap: 1rem;
+           margin-top: 1.5rem;
+           justify-items: center; /* Centrer billeder i deres grid-celler */
+       }
+       .image-gallery img {
+           width: 100%;
+           height: 120px; /* Fast højde for konsistens */
+           object-fit: cover;
+           border-radius: 0.5rem;
+           box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+       }
+       @media (min-width: 768px) {
+           .image-gallery {
+               grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+           }
+           .image-gallery img {
+               height: 150px;
+           }
+       }
+       /* PDF specific styling */
+       .pdf-content {
+           background-color: white; /* Sørg for hvid baggrund for PDF */
+           color: black;
+           padding: 20px;
+           font-family: 'Nunito Sans', sans-serif;
+       }
+       .pdf-chapter {
+           margin-bottom: 30px;
+           padding-bottom: 20px;
+           border-bottom: 1px dashed #ccc;
+       }
+       .pdf-chapter:last-child {
+           border-bottom: none;
+       }
+       .pdf-chapter h2 {
+           font-size: 24px;
+           color: #003B46;
+           margin-bottom: 10px;
+       }
+       .pdf-chapter p {
+           font-size: 14px;
+           line-height: 1.6;
+           margin-bottom: 10px;
+       }
+       .pdf-chapter .image-gallery img {
+           width: 100px;
+           height: 100px;
+           margin-right: 10px;
+           object-fit: cover;
+           border-radius: 5px;
+       }
+   </style>
+</head>
+<body class="bg-sea-sand text-sea-deep">
+   <div id="root"></div>
+
+   <script type="text/babel">
+       const { useState, useEffect, useRef, useCallback } = React;
+       const { initializeApp, getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged,
+               getFirestore, doc, getDoc, setDoc, collection, addDoc, onSnapshot, query, orderBy, limit } = window.firebase;
+
+       // Historiedata
+       const storyData = [
+           {
+               title: "Havets Hjerte",
+               icon: "❤️",
+               intro: "I dette kapitel lærer Luca, at sand navigation ikke kun handler om kort, men om at mærke verden og finde modet i sig selv til at se igennem udfordringer som tæt tåge.",
+               markerPos: { top: '65%', left: '75%' },
+               sections: [
+                   {
+                       text: `Gojo lærte Luca om stjernerne, mens Sukuna lærte ham om havets farer. En aften rullede en tæt tåge ind over Mørke Hvirvelstrømme. Luca mærkede frygten, men huskede Gojos ord. Han lukkede øjnene, koncentrerede sig og mærkede, hvor strømmen var svagest.`,
+                       vizUpdate: { type: 'doughnut', data: { label: "Lucas Mod", initialValue: 30, buttonText: "Navigér gennem tågen" } }
+                   },
+                   {
+                       text: `Han guidede dem sikkert igennem. Senere fandt de Havets Hjerte øen, som var beskyttet af illusioner. Ved at lytte til sit hjerte fandt Luca den rigtige vej til øen og til en lysende krystal – Havets Hjerte. Den gav ham en følelse af ro og styrke.`,
+                       vizUpdate: { type: 'doughnut_update', data: { finalValue: 100 } }
+                   }
+               ]
+           },
+           {
+               title: "Skyggeøens Illusioner",
+               icon: "☁️",
+               intro: "Her står Luca overfor en prøve i at skelne virkelighed fra fantasi. Han må stole på sin intuition for at undgå de fælder, som Skyggeøens magiske tåge lægger for ham.",
+               markerPos: { top: '35%', left: '25%' },
+               sections: [
+                   {
+                       text: `Rejsen gik til den mystiske Skyggeø, der var skjult i en tåge fuld af illusioner. Stemmer hviskede, og skræmmende syner dukkede op. Et falsk skibsvrag råbte på hjælp, men Sukuna advarede om fælden.`,
+                       vizUpdate: { type: 'pathChoice' }
+                   },
+                   {
+                       text: `Luca huskede sin træning, lukkede øjnene og mærkede efter et mønster i tågen i stedet for at se. Han fandt et hul i tågens cirkulære bevægelse, og de fandt øen. Her lærte he, at illusioner kun har magt, hvis man tror på dem.`,
+                       vizUpdate: { type: 'pathChoice_reveal' }
+                   }
+               ]
+           },
+           {
+               title: "Det Magiske Kompas",
+               icon: "🧭",
+               intro: "På Skyggeøen finder Luca et kompas, der ikke peger nord, men mod den *sikreste* vej. Lektionen er, at den rigtige vej ikke altid er den nemmeste, og at sand styrke er at overvinde frygt.",
+               markerPos: { top: '45%', left: '55%' },
+               sections: [
+                   {
+                       text: `På Skyggeøen fandt de Den Gamle Mariners Kompas. Det havde ingen nål, men en svævende, lysende kugle. For at få det til at virke, måtte Luca forestille sig den værste storm og ønske at finde en sikker vej.`,
+                       vizUpdate: { type: 'info', data: { text: "Forestil dig den værste storm...", icon: "🌪️" } }
+                   },
+                   {
+                       text: `Kompasset pegede mod de farlige Hviskende Rev. Sukuna forklarede, at kompasset ikke viste den nemme, men den *sikreste* vej. Luca forstod, at det handlede om at stole på sin dømmekraft, selv når vejen så skræmmende ud.`,
+                       vizUpdate: { type: 'info_update', data: { text: "Den sande styrke er at stole på sin dømmekraft.", icon: "✨" } }
+                   }
+               ]
+           },
+           {
+               title: "Koralrevets Tristhed",
+               icon: "🐠",
+               intro: "Dette kapitel handler om empati. Luca opdager, at et helt økosystem lider på grund af ét enkelt væsens sorg, og at heling starter med at forstå og vise venlighed.",
+               markerPos: { top: '80%', left: '40%' },
+               sections: [
+                   {
+                       text: `Under havets overflade fandt de et smukt koralrev, der var ved at blive gråt på grund af en mørk skygge. Havfruen Coralina forklarede, at det var en forbandelse af tristhed.`,
+                       vizUpdate: { type: 'colorChangeDoughnut', data: { label: "Revets Farver", buttonText: "Del Sukunas Sang" } }
+                   },
+                   {
+                       text: `Luca brugte sin evne til at mærke følelser og fandt kilden: en lille, grå klovnfisk, der havde mistet sin familie. For at redde revet, måtte de først hele klovfiskens hjerte. Sukuna gav den, overraskende nok, en magisk musling med en sang om håb. Da klovfisken blev glad, vendte farverne tilbage til revet.`,
+                       vizUpdate: { type: 'colorChangeDoughnut_update' }
+                   }
+               ]
+           },
+           {
+               title: "Den Største Skat",
+               icon: "💰",
+               intro: "Eventyrets afslutning afslører den sande mening med at være en stor marine. Det handler ikke om guld, men om godhed og om at efterlade verden et bedre sted.",
+               markerPos: { top: '25%', left: '80%' },
+               sections: [
+                   {
+                       text: `Den Syngende Hval guidede dem med sin sang til en skjult passage. Luca lærte at navigere efter stjernerne ved at lytte til hvalens melodi. Passagen førte til Skatteøen.`,
+                       vizUpdate: { type: 'barChart', data: { label1: "Guld & Juveler", label2: "En God Gerning", initialValue1: 40, initialValue2: 10 } }
+                   },
+                   {
+                       text: `Her fandt de ikke guld, men en magisk, boblende kilde, der kunne helbrede havet. Gojo forklarede, at den største skat ikke er rigdom, men at gøre en god gerning. Luca forstod, at at være en sand helt handlede om at beskytte og hjælpe andre.`,
+                       vizUpdate: { type: 'barChart_update', data: { finalValue1: 40, finalValue2: 95 } }
+                   }
+               ]
+           }
+       ];
+
+       // Baggrundsdata for tapet
+       const wallpaperData = [
+           { quote: "Havet er smukt, men også nådesløst.", imageUrl: "https://placehold.co/1920x1080/003B46/E0F7FA?text=Det+Vilde+Hav" },
+           { quote: "En illusion kan kun narre dem, der tror på den.", imageUrl: "https://placehold.co/1920x1080/E94F37/F4F1DE?text=Illusionernes+%C3%98" },
+           { quote: "Den sande styrke er at overvinde frygten i dit eget hjerte.", imageUrl: "https://placehold.co/1920x1080/07575B/FFFFFF?text=Modets+Rejse" },
+           { quote: "Den største skat er at gøre en god gerning.", imageUrl: "https://placehold.co/1920x1080/6c757d/E94F37?text=Godhedens+Kilde" },
+           { quote: "Hvert vindpust, hver bølge har sin egen historie at fortælle.", imageUrl: "https://placehold.co/1920x1080/003B46/E0F7FA?text=Havets+Sprog" },
+           { quote: "Luca, du har fundet din indre navigatør.", imageUrl: "https://placehold.co/1920x1080/E94F37/003B46?text=Lucas+Indre+Kompas" }
+       ];
+
+       // --- Firebase Service ---
+       const FirebaseService = {
+           db: null,
+           auth: null,
+           userId: null,
+           appId: window.appId,
+           isReady: false,
+
+           init(setAuthReady) {
+               this.db = window.firebase.db;
+               this.auth = window.firebase.auth;
+               
+               // Lyt efter firebaseReady event, som sendes fra den globale script-blok
+               document.addEventListener('firebaseReady', () => {
+                   this.userId = window.firebase.userId;
+                   this.isReady = window.firebase.isReady;
+                   setAuthReady(true); // Opdater React-tilstand
+                   console.log("Firebase klar i React. Bruger ID:", this.userId);
+               });
+           },
+
+           async loadUserProgress() {
+               if (!this.isReady || !this.db || !this.userId) return null;
+               try {
+                   const progressDocRef = doc(this.db, 'artifacts', this.appId, 'users', this.userId, 'progress', 'luca_story_progress');
+                   const progressDocSnap = await getDoc(progressDocRef);
+                   return progressDocSnap.exists() ? progressDocSnap.data() : null;
+               } catch (e) {
+                   console.error("Fejl ved indlæsning af brugerfremskridt:", e);
+                   return null;
+               }
+           },
+
+           async saveUserProgress(progressData) {
+               if (!this.isReady || !this.db || !this.userId) return;
+               try {
+                   const progressDocRef = doc(this.db, 'artifacts', this.appId, 'users', this.userId, 'progress', 'luca_story_progress');
+                   await setDoc(progressDocRef, progressData, { merge: true });
+                   console.log("Brugerfremskridt gemt.");
+               } catch (e) {
+                   console.error("Fejl ved lagring af brugerfremskridt:", e);
+               }
+           },
+
+           subscribeToCustomChapters(callback) {
+               if (!this.isReady || !this.db || !this.userId) return;
+               const customChaptersColRef = collection(this.db, 'artifacts', this.appId, 'users', this.userId, 'custom_chapters');
+               const q = query(customChaptersColRef, orderBy('timestamp', 'desc'));
+               return onSnapshot(q, (snapshot) => {
+                   const newChapters = [];
+                   snapshot.docChanges().forEach(change => {
+                       if (change.type === "added") {
+                           newChapters.push({ id: change.doc.id, ...change.doc.data() });
+                       }
+                   });
+                   if (newChapters.length > 0) {
+                       callback(newChapters);
+                   }
+               }, (error) => {
+                   console.error("Fejl ved abonnement på brugerdefinerede kapitler:", error);
+               });
+           },
+
+           async addGeneratedChapter(chapterData) {
+               if (!this.isReady || !this.db || !this.userId) {
+                   throw new Error("Firebase er ikke klar. Prøv igen om et øjeblik.");
+               }
+               const customChaptersColRef = collection(this.db, 'artifacts', this.appId, 'users', this.userId, 'custom_chapters');
+               const docRef = await addDoc(customChaptersColRef, chapterData);
+               return docRef.id;
+           }
+       };
+
+       // --- Canvas Renderer Component ---
+       const BackgroundCanvas = () => {
+           const canvasRef = useRef(null);
+           const bubbles = useRef([]);
+           const waves = useRef([]);
+           const animationFrameId = useRef(null);
+
+           const resizeCanvas = useCallback(() => {
+               const canvas = canvasRef.current;
+               if (canvas) {
+                   canvas.width = window.innerWidth;
+                   canvas.height = window.innerHeight;
+                   bubbles.current = [];
+                   waves.current = [];
+                   createBubbles(50);
+                   createWaves(3);
+               }
+           }, []);
+
+           const createBubbles = (count) => {
+               const canvas = canvasRef.current;
+               for (let i = 0; i < count; i++) {
+                   const x = Math.random() * canvas.width;
+                   const y = Math.random() * canvas.height;
+                   const radius = Math.random() * 5 + 2;
+                   const speed = Math.random() * 0.5 + 0.1;
+                   bubbles.current.push(new Bubble(x, y, radius, speed));
+               }
+           };
+
+           const createWaves = (count) => {
+               const canvas = canvasRef.current;
+               for (let i = 0; i < count; i++) {
+                   const y = (canvas.height / (count + 1)) * (i + 1);
+                   const amplitude = Math.random() * 10 + 5;
+                   const frequency = Math.random() * 0.01 + 0.005;
+                   const speed = Math.random() * 0.02 + 0.01;
+                   waves.current.push(new Wave(y, amplitude, frequency, speed));
+               }
+           };
+
+           const animateBackground = useCallback(() => {
+               const ctx = canvasRef.current.getContext('2d');
+               ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+               
+               waves.current.forEach(wave => {
+                   wave.update();
+                   wave.draw(ctx);
+               });
+
+               bubbles.current.forEach(bubble => {
+                   bubble.update();
+                   bubble.draw(ctx);
+               });
+
+               animationFrameId.current = requestAnimationFrame(animateBackground);
+           }, []);
+
+           useEffect(() => {
+               resizeCanvas();
+               window.addEventListener('resize', resizeCanvas);
+               animateBackground();
+
+               return () => {
+                   window.removeEventListener('resize', resizeCanvas);
+                   if (animationFrameId.current) {
+                       cancelAnimationFrame(animationFrameId.current);
+                   }
+               };
+           }, [resizeCanvas, animateBackground]);
+
+           class Bubble {
+               constructor(x, y, radius, speed) {
+                   this.x = x;
+                   this.y = y;
+                   this.radius = radius;
+                   this.speed = speed;
+                   this.opacity = Math.random() * 0.5 + 0.2;
+               }
+               draw(ctx) {
+                   ctx.beginPath();
+                   ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                   ctx.fillStyle = `rgba(255, 255, 255, ${this.opacity})`;
+                   ctx.fill();
+               }
+               update() {
+                   this.y -= this.speed;
+                   if (this.y < -this.radius) {
+                       this.y = canvasRef.current.height + this.radius;
+                       this.x = Math.random() * canvasRef.current.width;
+                   }
+               }
+           }
+
+           class Wave {
+               constructor(y, amplitude, frequency, speed) {
+                   this.y = y;
+                   this.amplitude = amplitude;
+                   this.frequency = frequency;
+                   this.speed = speed;
+                   this.offset = Math.random() * Math.PI * 2;
+               }
+               draw(ctx) {
+                   ctx.beginPath();
+                   ctx.moveTo(0, this.y + Math.sin(this.offset) * this.amplitude);
+                   for (let i = 0; i < canvasRef.current.width; i++) {
+                       ctx.lineTo(i, this.y + Math.sin(i * this.frequency + this.offset) * this.amplitude);
+                   }
+                   ctx.strokeStyle = `rgba(0, 59, 70, 0.1)`;
+                   ctx.lineWidth = 2;
+                   ctx.stroke();
+               }
+               update() {
+                   this.offset += this.speed;
+               }
+           }
+
+           return <canvas id="background-canvas" ref={canvasRef}></canvas>;
+       };
+
+       // --- Luca Avatar Component ---
+       const LucaAvatar = () => {
+           const [lucaAvatarUrl, setLucaAvatarUrl] = useState("https://placehold.co/100x100/FFD700/000000?text=Luca"); // Initial placeholder
+           const [avatarLoading, setAvatarLoading] = useState(true);
+           const [avatarError, setAvatarError] = useState('');
+
+           useEffect(() => {
+               const generateAvatar = async () => {
+                   setAvatarLoading(true);
+                   setAvatarError('');
+                   const prompt = "A young boy named Luca with short blonde hair and glasses, wearing casual clothes, in a child-friendly anime style, full body shot, standing, happy expression.";
+                   const payload = { instances: { prompt: prompt }, parameters: { "sampleCount": 1 } };
+                   const apiKey = ""; // Canvas provides this at runtime.
+                   const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`;
+
+                   try {
+                       const response = await fetch(apiUrl, {
+                           method: 'POST',
+                           headers: { 'Content-Type': 'application/json' },
+                           body: JSON.stringify(payload)
+                       });
+                       const result = await response.json();
+
+                       if (result.predictions && result.predictions.length > 0 && result.predictions[0].bytesBase64Encoded) {
+                           const imageUrl = `data:image/png;base64,${result.predictions[0].bytesBase64Encoded}`;
+                           setLucaAvatarUrl(imageUrl);
+                       } else {
+                           console.error("Uventet Imagen API-svarstruktur for avatar:", result);
+                           setAvatarError("Kunne ikke generere avatar. Bruger standard.");
+                       }
+                   } catch (error) {
+                       console.error("Fejl ved generering af avatar:", error);
+                       setAvatarError("Fejl ved generering af avatar. Bruger standard.");
+                   } finally {
+                       setAvatarLoading(false);
+                   }
+               };
+               generateAvatar();
+           }, []); // Run once on mount
+
+           const handleClick = () => {
+               setShowMessage(true);
+               setTimeout(() => setShowMessage(false), 1500);
+           };
+
+           const [showMessage, setShowMessage] = useState(false); // State for the message
+
+           return (
+               <div id="luca-avatar-container" className="absolute top-4 left-4 z-40">
+                   <img
+                       id="luca-avatar"
+                       src={lucaAvatarUrl}
+                       alt="Luca Avatar"
+                       className="rounded-full border-4 border-white shadow-lg cursor-pointer"
+                       onClick={handleClick}
+                   />
+                   {avatarLoading && <div className="loader absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8"></div>}
+                   {avatarError && <p className="text-red-500 text-xs mt-1">{avatarError}</p>}
+                   <div
+                       id="avatar-message"
+                       className={`absolute top-full left-1/2 -translate-x-1/2 mt-2 bg-sea-deep text-white text-sm px-3 py-1 rounded-lg whitespace-nowrap ${showMessage ? 'is-visible' : ''}`}
+                   >
+                       Hej, jeg er Luca!
+                   </div>
+               </div>
+           );
+       };
+
+       // --- Dynamic Wallpaper Component ---
+       const DynamicWallpaper = ({ wallpaperData }) => {
+           const [currentWallpaperIndex, setCurrentWallpaperIndex] = useState(0);
+           const wallpaperIntervalId = useRef(null);
+           const [isVisible, setIsVisible] = useState(false);
+
+           const changeWallpaper = useCallback(() => {
+               setIsVisible(false);
+               setTimeout(() => {
+                   setCurrentWallpaperIndex(prevIndex => (prevIndex + 1) % wallpaperData.length);
+                   setIsVisible(true);
+               }, 1000); // Vent på fade ud
+           }, [wallpaperData]);
+
+           useEffect(() => {
+               // Start animation, når komponent mountes
+               setIsVisible(true);
+               wallpaperIntervalId.current = setInterval(changeWallpaper, 10000);
+
+               return () => {
+                   if (wallpaperIntervalId.current) {
+                       clearInterval(wallpaperIntervalId.current);
+                   }
+               };
+           }, [changeWallpaper]);
+
+           const currentWallpaper = wallpaperData[currentWallpaperIndex];
+
+           return (
+               <div id="dynamic-wallpaper" className={isVisible ? 'opacity-100' : 'opacity-0'}>
+                   <img id="wallpaper-image" src={currentWallpaper.imageUrl} alt="Dynamisk Baggrundsbillede" />
+                   <div id="wallpaper-quote-container">
+                       <p id="wallpaper-quote">{currentWallpaper.quote}</p>
+                   </div>
+               </div>
+           );
+       };
+
+       // --- Visualization Components ---
+       const DoughnutChart = ({ data, onAction }) => {
+           const canvasRef = useRef(null);
+           const chartInstance = useRef(null);
+           const [buttonDisabled, setButtonDisabled] = useState(false);
+
+           useEffect(() => {
+               if (chartInstance.current) {
+                   chartInstance.current.destroy();
+               }
+               const ctx = canvasRef.current.getContext('2d');
+               chartInstance.current = new Chart(ctx, {
+                   type: 'doughnut',
+                   data: {
+                       labels: [data.label, ''],
+                       datasets: [{
+                           data: [data.initialValue, 100 - data.initialValue],
+                           backgroundColor: ['#07575B', '#003B4620'],
+                           borderColor: '#E0F7FA',
+                           borderWidth: 4,
+                       }]
+                   },
+                   options: {
+                       responsive: true,
+                       maintainAspectRatio: false,
+                       cutout: '70%',
+                       plugins: { legend: { display: false }, tooltip: { enabled: false } }
+                   }
+               });
+               setButtonDisabled(false); // Nulstil knap-tilstand ved ny chart render
+           }, [data]);
+
+           const handleClick = () => {
+               if (chartInstance.current) {
+                   chartInstance.current.data.datasets[0].data = [data.finalValue, 100 - data.finalValue];
+                   chartInstance.current.update();
+                   setButtonDisabled(true);
+                   onAction("Modet vokser! 💪");
+               }
+           };
+
+           return (
+               <div className="text-center fade-in">
+                   {/* Tilføjet responsive bredde og centrering til chart container */}
+                   <div className="chart-container w-full max-w-xs sm:max-w-sm md:max-w-md mx-auto">
+                       <canvas ref={canvasRef}></canvas>
+                   </div>
+                   <button onClick={handleClick} disabled={buttonDisabled} className="btn-ocean py-2 px-4 rounded-lg mt-4 block mx-auto">
+                       {buttonDisabled ? onAction : data.buttonText}
+                   </button>
+               </div>
+           );
+       };
+
+       const PathChoice = ({ onAction }) => {
+           const [result, setResult] = useState('');
+           const [selectedPath, setSelectedPath] = useState(null);
+
+           const handleChoice = (choice) => {
+               setSelectedPath(choice);
+               if (choice === 'truth') {
+                   setResult('Korrekt! Luca stoler på sin intuition. ✨');
+               } else {
+                   setResult('Forkert! Det er en fælde.');
+               }
+               onAction(); // Meddel forælder, at interaktion er sket
+           };
+
+           return (
+               <div className="text-center fade-in">
+                   <p className="mb-4 font-semibold">Hvilken vej stoler Luca på?</p>
+                   <div className="flex flex-col md:flex-row justify-center gap-4">
+                       <button
+                           onClick={() => handleChoice('illusion')}
+                           className={`path-choice-btn btn-ocean py-2 px-4 rounded-lg shadow-md ${selectedPath === 'illusion' ? 'selected incorrect' : ''}`}
+                           disabled={selectedPath !== null}
+                       >
+                           Illusionens Sti 👻
+                       </button>
+                       <button
+                           onClick={() => handleChoice('truth')}
+                           className={`path-choice-btn btn-ocean py-2 px-4 rounded-lg shadow-md ${selectedPath === 'truth' ? 'selected correct' : ''}`}
+                           disabled={selectedPath !== null}
+                       >
+                           Sandhedens Sti ✅
+                       </button>
+                   </div>
+                   <p id="path-result" className="mt-4 font-bold text-sea-coral">{result}</p>
+               </div>
+           );
+       };
+
+       const ColorChangeDoughnut = ({ data, onAction }) => {
+           const canvasRef = useRef(null);
+           const chartInstance = useRef(null);
+           const [buttonDisabled, setButtonDisabled] = useState(false);
+
+           useEffect(() => {
+               if (chartInstance.current) {
+                   chartInstance.current.destroy();
+               }
+               const ctx = canvasRef.current.getContext('2d');
+               chartInstance.current = new Chart(ctx, {
+                   type: 'doughnut',
+                   data: {
+                       labels: ['Tristhed', 'Glæde'],
+                       datasets: [{
+                           data: [80, 20],
+                           backgroundColor: ['#6c757d', '#003B4620'],
+                           borderColor: '#E0F7FA',
+                           borderWidth: 4
+                       }]
+                   },
+                   options: {
+                       responsive: true,
+                       maintainAspectRatio: false,
+                       cutout: '70%',
+                       plugins: {
+                           legend: { display: true, position: 'bottom', labels: { color: '#003B46' } },
+                           tooltip: { enabled: true }
+                       }
+                   }
+               });
+               setButtonDisabled(false);
+           }, [data]);
+
+           const handleClick = () => {
+               if (chartInstance.current) {
+                   chartInstance.current.data.datasets[0].data = [5, 95];
+                   chartInstance.current.data.datasets[0].backgroundColor = ['#6c757d', '#E94F37'];
+                   chartInstance.current.update();
+                   setButtonDisabled(true);
+                   onAction("Revet er helet! 😊");
+               }
+           };
+
+           return (
+               <div className="text-center fade-in">
+                   {/* Tilføjet responsive bredde og centrering til chart container */}
+                   <div className="chart-container w-full max-w-xs sm:max-w-sm md:max-w-md mx-auto">
+                       <canvas ref={canvasRef}></canvas>
+                   </div>
+                   <button onClick={handleClick} disabled={buttonDisabled} className="btn-ocean py-2 px-4 rounded-lg mt-4 block mx-auto">
+                       {buttonDisabled ? onAction : data.buttonText}
+                   </button>
+               </div>
+           );
+       };
+
+       const BarChart = ({ data }) => {
+           const canvasRef = useRef(null);
+           const chartInstance = useRef(null);
+
+           useEffect(() => {
+               if (chartInstance.current) {
+                   chartInstance.current.destroy();
+               }
+               const ctx = canvasRef.current.getContext('2d');
+               chartInstance.current = new Chart(ctx, {
+                   type: 'bar',
+                   data: {
+                       labels: [data.label1, data.label2],
+                       datasets: [{
+                           label: 'Værdi',
+                           data: [data.initialValue1, data.initialValue2],
+                           backgroundColor: ['#a9a9a9', '#E94F37'],
+                           borderColor: '#003B46',
+                           borderWidth: 2,
+                           borderRadius: 5
+                       }]
+                   },
+                   options: {
+                       indexAxis: 'y',
+                       responsive: true,
+                       maintainAspectRatio: false,
+                       plugins: { legend: { display: false } },
+                       scales: {
+                           x: { beginAtZero: true, max: 100, ticks: { color: '#003B46' }, grid: { color: '#003B4620' } },
+                           y: { ticks: { color: '#003B46', font: { weight: 'bold' } }, grid: { display: false } }
+                       }
+                   }
+               });
+           }, [data]);
+
+           return (
+               <div className="text-center fade-in">
+                   {/* Tilføjet responsive bredde og centrering til chart container */}
+                   <div className="chart-container w-full max-w-xs sm:max-w-sm md:max-w-md mx-auto">
+                       <canvas ref={canvasRef}></canvas>
+                   </div>
+               </div>
+           );
+       };
+
+       const InfoBox = ({ data }) => (
+           <div className="info-box text-center p-4 bg-sea-deep/10 rounded-lg shadow-md fade-in">
+               <span className="info-icon text-5xl mb-2 block">{data.icon || ''}</span>
+               <p className="text-lg font-bold text-sea-deep">{data.text}</p>
+           </div>
+       );
+
+       // --- Chapter Panel Component ---
+       const ChapterPanel = ({ chapter, isOpen, onClose, onNextSection, currentSectionIndex }) => {
+           const vizRef = useRef(null);
+           const [vizActionMessage, setVizActionMessage] = useState('');
+           const [chapterImages, setChapterImages] = useState([]);
+           const [imageLoading, setImageLoading] = useState(false);
+           const [imageError, setImageError] = useState('');
+
+           // Function to generate image prompt from chapter text using Gemini
+           const generateImagePrompt = async (chapterText) => {
+               // Fixed description of Luca based on provided images
+               const lucaDescription = "A young boy named Luca with short blonde hair and glasses, wearing casual clothes, in a child-friendly anime style.";
+               
+               const prompt = `Skriv en detaljeret, børnevenlig prompt til et billedgenereringsværktøj, der beskriver en scene fra følgende eventyrtekst. Fokusér på hovedpersonerne (Luca, Gojo, Sukuna) og vigtige elementer/handlinger. Stilen skal være "børnevenlig anime". Prompten skal være på engelsk og max 150 tegn. Start med at beskrive Luca: ${lucaDescription} Teksten er: "${chapterText}"`;
+               
+               let chatHistory = [];
+               chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+               const payload = { contents: chatHistory };
+               const apiKey = ""; // Canvas provides this at runtime.
+
+               const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+               try {
+                   const response = await fetch(apiUrl, {
+                       method: 'POST',
+                       headers: { 'Content-Type': 'application/json' },
+                       body: JSON.stringify(payload)
+                   });
+                   const result = await response.json();
+
+                   if (result.candidates && result.candidates.length > 0 &&
+                       result.candidates[0].content && result.candidates[0].content.parts &&
+                       result.candidates[0].content.parts.length > 0) {
+                       return result.candidates[0].content.parts[0].text;
+                   } else {
+                       console.error("Uventet LLM-svarstruktur for billedprompt:", result);
+                       return `${lucaDescription} A scene from Luca's adventure with Gojo and Sukuna in a magical ocean.`;
+                   }
+               } catch (error) {
+                   console.error("Fejl ved generering af billedprompt:", error);
+                   return `${lucaDescription} A scene from Luca's adventure with Gojo and Sukuna in a magical ocean.`;
+               }
+           };
+
+           // Function to generate images using Imagen
+           const generateChapterImages = async (chapterText) => {
+               setImageLoading(true);
+               setImageError('');
+               setChapterImages([]);
+
+               try {
+                   const imagePrompt = await generateImagePrompt(chapterText);
+                   console.log("Generated Image Prompt:", imagePrompt);
+
+                   const imageUrls = [];
+                   const numberOfImages = 3; // Generate a series of 3 images
+
+                   for (let i = 0; i < numberOfImages; i++) {
+                       const payload = { instances: { prompt: imagePrompt }, parameters: { "sampleCount": 1 } };
+                       const apiKey = ""; // Canvas provides this at runtime.
+                       const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`;
+
+                       const response = await fetch(apiUrl, {
+                           method: 'POST',
+                           headers: { 'Content-Type': 'application/json' },
+                           body: JSON.stringify(payload)
+                       });
+                       const result = await response.json();
+
+                       if (result.predictions && result.predictions.length > 0 && result.predictions[0].bytesBase64Encoded) {
+                           const imageUrl = `data:image/png;base64,${result.predictions[0].bytesBase64Encoded}`;
+                           imageUrls.push(imageUrl);
+                       } else {
+                           console.error("Uventet Imagen API-svarstruktur:", result);
+                           setImageError("Kunne ikke generere alle billeder. Prøv igen.");
+                           break; // Stop if one image fails
+                       }
+                   }
+                   setChapterImages(imageUrls);
+               } catch (error) {
+                   console.error("Fejl ved generering af kapitelbilleder:", error);
+                   setImageError("Fejl ved generering af billeder: " + error.message);
+               } finally {
+                   setImageLoading(false);
+               }
+           };
+
+           useEffect(() => {
+               // Nulstil action message, når kapitel ændres
+               setVizActionMessage('');
+               setChapterImages([]); // Ryd billeder ved nyt kapitel
+               setImageError(''); // Ryd fejl ved nyt kapitel
+               if (isOpen && chapter) {
+                   // Generate images when the panel opens for a new chapter
+                   const fullChapterText = chapter.sections.map(s => s.text).join(' ');
+                   generateChapterImages(fullChapterText);
+               }
+           }, [chapter, isOpen]); // Rerun when chapter or isOpen changes
+
+           const handleVizAction = (message) => {
+               setVizActionMessage(message);
+           };
+
+           const renderVisualization = (vizUpdate) => {
+               if (!vizUpdate) return null;
+               switch (vizUpdate.type) {
+                   case 'doughnut':
+                   case 'doughnut_update':
+                       return <DoughnutChart data={vizUpdate.data} onAction={handleVizAction} />;
+                   case 'pathChoice':
+                   case 'pathChoice_reveal':
+                       return <PathChoice onAction={handleVizAction} />;
+                   case 'colorChangeDoughnut':
+                   case 'colorChangeDoughnut_update':
+                       return <ColorChangeDoughnut data={vizUpdate.data} onAction={handleVizAction} />;
+                   case 'barChart':
+                   case 'barChart_update':
+                       return <BarChart data={vizUpdate.data} />;
+                   case 'info':
+                   case 'info_update':
+                       return <InfoBox data={vizUpdate.data} />;
+                   default:
+                       return null;
+               }
+           };
+
+           const currentSection = chapter?.sections[currentSectionIndex];
+
+           return (
+               <aside className={`chapter-panel fixed top-0 right-0 w-full md:w-1/2 lg:w-1/3 h-full bg-sea-water shadow-2xl p-4 md:p-6 z-50 flex flex-col ${isOpen ? 'is-open' : ''}`}>
+                   <button onClick={onClose} className="absolute top-4 right-4 text-sea-deep text-3xl font-bold">×</button>
+                   <div id="panel-content" className="flex-grow overflow-y-auto">
+                       {chapter && (
+                           <>
+                               <div className="flex items-center mb-4 fade-in">
+                                   <span id="chapter-icon" className="icon-large mr-4 text-sea-coral">{chapter.icon}</span>
+                                   <h2 id="chapter-title" className="text-3xl font-bold text-sea-deep">{chapter.title}</h2>
+                               </div>
+                               <p id="chapter-intro" className="text-md text-sea-deep/80 mb-6 border-l-4 border-sea-coral pl-4 fade-in">{chapter.intro}</p>
+                               <div id="chapter-viz" className="my-6 flex-shrink-0" ref={vizRef}>
+                                   {currentSection && renderVisualization(currentSection.vizUpdate)}
+                                   {vizActionMessage && <p className="text-center text-sea-coral mt-2 fade-in">{vizActionMessage}</p>}
+                               </div>
+                               <div id="chapter-text" className="text-sea-deep/90 leading-relaxed prose flex-grow fade-in">
+                                   {currentSection && currentSection.text.split('\n').map((p, i) => <p key={i} className="mb-3">{p}</p>)}
+                               </div>
+
+                               {/* Image Generation Section */}
+                               <div className="mt-6 pt-6 border-t border-sea-deep/20 fade-in">
+                                   <h3 className="text-xl font-bold text-sea-deep mb-4">Kapitelbilleder:</h3>
+                                   {imageLoading && (
+                                       <div className="text-center text-sea-deep/80">
+                                           <div className="loader"></div>
+                                           <p>Genererer billeder...</p>
+                                       </div>
+                                   )}
+                                   {imageError && (
+                                       <p className="text-red-500 text-center mt-4">{imageError}</p>
+                                   )}
+                                   {!imageLoading && chapterImages.length > 0 && (
+                                       <div className="image-gallery">
+                                           {chapterImages.map((imageUrl, idx) => (
+                                               <img key={idx} src={imageUrl} alt={`Kapitelbillede ${idx + 1}`} />
+                                           ))}
+                                       </div>
+                                   )}
+                                   {!imageLoading && chapterImages.length === 0 && !imageError && (
+                                       <p className="text-sea-deep/70 text-center">Ingen billeder genereret for dette kapitel endnu.</p>
+                                   )}
+                               </div>
+                           </>
+                       )}
+                   </div>
+                   <div className="flex-shrink-0 mt-4">
+                       <button onClick={onNextSection} className="roblox-btn green py-2 px-4 block w-full">
+                           {chapter && currentSectionIndex === chapter.sections.length - 1 ? "Afslut Kapitel" : "Næste"}
+                       </button>
+                   </div>
+               </aside>
+           );
+       };
+
+       // --- Customize Panel Component ---
+       const CustomizePanel = ({ isOpen, onClose, onGenerateChapter, onAddChapterToMap, generationStatus, generatedChapterText, errorMessage, onResetForm }) => {
+           const handleGenerateClick = () => {
+               onGenerateChapter();
+           };
+
+           const handleAddClick = () => {
+               onAddChapterToMap();
+               onResetForm();
+           };
+
+           const handleChoiceClick = (e) => {
+               e.target.classList.toggle('selected');
+               e.target.classList.toggle('btn-ocean');
+               e.target.classList.toggle('btn-coral');
+           };
+
+           useEffect(() => {
+               if (!isOpen) {
+                   onResetForm();
+               }
+           }, [isOpen, onResetForm]);
+
+           return (
+               <aside className={`customize-panel fixed top-0 right-0 w-full md:w-1/2 lg:w-1/3 h-full bg-sea-water shadow-2xl p-4 md:p-6 z-50 flex flex-col ${isOpen ? 'is-open' : ''}`}>
+                   <button onClick={onClose} className="absolute top-4 right-4 text-sea-deep text-3xl font-bold">×</button>
+                   <h2 className="text-3xl font-bold text-sea-deep mb-4">Skab Dit Eget Eventyr</h2>
+                   <p className="text-md text-sea-deep/80 mb-6 border-l-4 border-sea-coral pl-4">Fortæl os, hvad Luca, Gojo og Sukuna skal opleve i næste kapitel! Vælg fra mulighederne eller skriv dine egne idéer.</p>
+                   
+                   <div className="flex-grow overflow-y-auto mb-4">
+                       <div className="mb-6">
+                           <label htmlFor="custom-prompt-textarea" className="block text-lg font-semibold mb-2">Skriv din egen idé:</label>
+                           <textarea id="custom-prompt-textarea" className="w-full p-3 rounded-lg border border-sea-deep/30 bg-white/50 focus:outline-none focus:ring-2 focus:ring-sea-coral" rows="4" placeholder="F.eks. 'De møder en venlig drage' eller 'De finder en skattekiste på bunden af havet'"></textarea>
+                       </div>
+
+                       <div className="mb-6">
+                           <label className="block text-lg font-semibold mb-2">Vælg et dyr at møde:</label>
+                           <div id="animal-choices" className="grid grid-cols-2 gap-2">
+                               <button className="choice-btn btn-ocean py-2 px-3 rounded-lg text-sm" data-choice="animal:venlig delfin" onClick={handleChoiceClick}>Venlig delfin 🐬</button>
+                               <button className="choice-btn btn-ocean py-2 px-3 rounded-lg text-sm" data-choice="animal:klog blæksprutte" onClick={handleChoiceClick}>Klog blæksprutte 🐙</button>
+                               <button className="choice-btn btn-ocean py-2 px-3 rounded-lg text-sm" data-choice="animal:sjov søløve" onClick={handleChoiceClick}>Sjov søløve 🦭</button>
+                               <button className="choice-btn btn-ocean py-2 px-3 rounded-lg text-sm" data-choice="animal:mystisk hval" onClick={handleChoiceClick}>Mystisk hval 🐳</button>
+                           </div>
+                       </div>
+
+                       <div className="mb-6">
+                           <label className="block text-lg font-semibold mb-2">Vælg en udfordring:</label>
+                           <div id="challenge-choices" className="grid grid-cols-2 gap-2">
+                               <button className="choice-btn btn-ocean py-2 px-3 rounded-lg text-sm" data-choice="challenge:navigere gennem en storm" onClick={handleChoiceClick}>Navigere gennem en storm ⛈️</button>
+                               <button className="choice-btn btn-ocean py-2 px-3 rounded-lg text-sm" data-choice="challenge:finde vej i en labyrint af koralrev" onClick={handleChoiceClick}>Finde vej i koralrev 🐠</button>
+                               <button className="choice-btn btn-ocean py-2 px-3 rounded-lg text-sm" data-choice="challenge:løse en havgåde for en havånd" onClick={handleChoiceClick}>Løse en havgåde 🧜‍♀️</button>
+                               <button className="choice-btn btn-ocean py-2 px-3 rounded-lg text-sm" data-choice="challenge:hjælpe et forlist skib" onClick={handleChoiceClick}>Hjælpe forlist skib 🚢</button>
+                           </div>
+                       </div>
+
+                       <div className="mb-6">
+                           <label className="block text-lg font-semibold mb-2">Vælg en ny evne til Luca:</label>
+                           <div id="ability-choices" className="grid grid-cols-2 gap-2">
+                               <button className="choice-btn btn-ocean py-2 px-3 rounded-lg text-sm" data-choice="ability:tale med havdyr" onClick={handleChoiceClick}>Tale med havdyr 🗣️</button>
+                               <button className="choice-btn btn-ocean py-2 px-3 rounded-lg text-sm" data-choice="ability:kontrollere vandstrømme" onClick={handleChoiceClick}>Kontrollere vand 🌊</button>
+                               <button className="choice-btn btn-ocean py-2 px-3 rounded-lg text-sm" data-choice="ability:se i mørke under vandet" onClick={handleChoiceClick}>Se i mørke 👁️</button>
+                               <button className="choice-btn btn-ocean py-2 px-3 rounded-lg text-sm" data-choice="ability:svømme superhurtigt" onClick={handleChoiceClick}>Svømme superhurtigt 🚀</button>
+                           </div>
+                       </div>
+                   </div>
+
+                   <div className="flex-shrink-0 mt-4">
+                       <button onClick={handleGenerateClick} disabled={generationStatus.isLoading} className="roblox-btn py-3 px-8 block w-full">Generer Næste Kapitel</button>
+                       <div className={`mt-4 text-center text-sea-deep/80 ${generationStatus.isLoading ? '' : 'hidden'}`}>
+                           <div className="loader"></div>
+                           <p>Genererer dit kapitel...</p>
+                       </div>
+                       <div className={`mt-6 p-4 bg-white/70 rounded-lg shadow-inner ${generatedChapterText ? 'fade-in' : 'hidden'}`}>
+                           <h3 className="text-xl font-bold text-sea-deep mb-2">Dit Nye Kapitel:</h3>
+                           <div id="generated-chapter-text" className="prose text-sea-deep/90" dangerouslySetInnerHTML={{ __html: generatedChapterText }}></div>
+                           <button onClick={handleAddClick} className="roblox-btn green py-2 px-4 mt-4 block mx-auto">Tilføj til Kort</button>
+                       </div>
+                       <p className={`text-red-500 text-center mt-4 ${errorMessage ? '' : 'hidden'}`}>{errorMessage}</p>
+                   </div>
+               </aside>
+           );
+       };
+
+       // --- Full Adventure Panel Component ---
+       const FullAdventurePanel = ({ isOpen, onClose, chapters }) => {
+           const contentRef = useRef(null);
+           const [shareMessage, setShareMessage] = useState('');
+
+           const handleDownloadPdf = async () => {
+               setShareMessage('Forbereder PDF...');
+               const input = contentRef.current;
+               
+               // Temporarily adjust styles for PDF generation if needed (e.g., remove overflow hidden)
+               // This might be tricky with Tailwind's utility-first approach,
+               // but for simple text and images, html2canvas usually handles it well.
+               const originalOverflow = document.body.style.overflow;
+               document.body.style.overflow = 'visible'; // Ensure all content is rendered
+
+               try {
+                   const canvas = await html2canvas(input, {
+                       scale: 2, // Higher scale for better quality PDF
+                       useCORS: true, // Important for images from external sources
+                       logging: true,
+                       scrollY: -window.scrollY, // Capture from top of the page
+                       windowWidth: document.documentElement.offsetWidth,
+                       windowHeight: document.documentElement.offsetHeight
+                   });
+
+                   document.body.style.overflow = originalOverflow; // Restore original overflow
+
+                   const imgData = canvas.toDataURL('image/png');
+                   const pdf = new window.jspdf.jsPDF('p', 'mm', 'a4');
+                   const imgWidth = 210; // A4 width in mm
+                   const pageHeight = 297; // A4 height in mm
+                   const imgHeight = canvas.height * imgWidth / canvas.width;
+                   let heightLeft = imgHeight;
+                   let position = 0;
+
+                   pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+                   heightLeft -= pageHeight;
+
+                   while (heightLeft >= 0) {
+                       position = heightLeft - imgHeight;
+                       pdf.addPage();
+                       pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+                       heightLeft -= pageHeight;
+                   }
+
+                   pdf.save('luca_eventyr.pdf');
+                   setShareMessage('PDF downloadet! Du kan nu finde filen "luca_eventyr.pdf" i din downloads-mappe og dele den.');
+               } catch (error) {
+                   console.error("Fejl ved generering af PDF:", error);
+                   setShareMessage('Fejl ved generering af PDF. Prøv igen.');
+               } finally {
+                   // Reset overflow in case of error too
+                   document.body.style.overflow = originalOverflow;
+                   setTimeout(() => setShareMessage(''), 5000); // Clear message after 5 seconds
+               }
+           };
+
+           return (
+               <aside className={`full-adventure-panel fixed top-0 right-0 w-full md:w-1/2 lg:w-1/3 h-full bg-sea-water shadow-2xl p-4 md:p-6 z-50 flex flex-col ${isOpen ? 'is-open' : ''}`}>
+                   <button onClick={onClose} className="absolute top-4 right-4 text-sea-deep text-3xl font-bold">×</button>
+                   <h2 className="text-3xl font-bold text-sea-deep mb-4">Hele Dit Eventyr</h2>
+                   <p className="text-md text-sea-deep/80 mb-6 border-l-4 border-sea-coral pl-4">Læs hele din rejse med Luca, Gojo og Sukuna fra start til slut!</p>
+                   
+                   <div ref={contentRef} className="flex-grow overflow-y-auto mb-4 pdf-content">
+                       {chapters.map((chapter, index) => (
+                           <div key={chapter.id || `full-chapter-${index}`} className="pdf-chapter mb-8 pb-6 border-b border-sea-deep/20">
+                               <h3 className="text-2xl font-bold text-sea-deep mb-3">{chapter.icon} {chapter.title}</h3>
+                               <p className="text-sea-deep/90 leading-relaxed mb-4">{chapter.intro}</p>
+                               {chapter.sections.map((section, secIndex) => (
+                                   <p key={`sec-${index}-${secIndex}`} className="text-sea-deep/90 leading-relaxed mb-3">{section.text}</p>
+                               ))}
+                               {/* Display images if available for the chapter */}
+                               {chapter.images && chapter.images.length > 0 && (
+                                   <div className="image-gallery mt-4">
+                                       {chapter.images.map((imageUrl, imgIdx) => (
+                                           <img key={`img-${index}-${imgIdx}`} src={imageUrl} alt={`Kapitelbillede ${index + 1}`} className="pdf-image" />
+                                       ))}
+                                   </div>
+                               )}
+                           </div>
+                       ))}
+                   </div>
+
+                   <div className="flex-shrink-0 mt-4 text-center">
+                       <button onClick={handleDownloadPdf} className="roblox-btn green py-3 px-8 block w-full mb-4">Download som PDF</button>
+                       {shareMessage && <p className="text-sm text-sea-deep/70">{shareMessage}</p>}
+                       <button onClick={onClose} className="roblox-btn red py-3 px-8 block w-full mt-2">Luk</button>
+                   </div>
+               </aside>
+           );
+       };
+
+       // --- Main App Component ---
+       const App = () => {
+           const [isAuthReady, setAuthReady] = useState(false);
+           const [isIntroVisible, setIsIntroVisible] = useState(true);
+           const [isChapterPanelOpen, setIsChapterPanelOpen] = useState(false);
+           const [isCustomizePanelOpen, setIsCustomizePanelOpen] = useState(false);
+           const [isFullAdventureViewOpen, setIsFullAdventureViewOpen] = useState(false); // New state
+           const [currentChapterIndex, setCurrentChapterIndex] = useState(-1);
+           const [currentSectionIndex, setCurrentSectionIndex] = useState(-1);
+           const [storyChapters, setStoryChapters] = useState(storyData);
+           const [generatedCustomChapter, setGeneratedCustomChapter] = useState(null);
+           const [generationStatus, setGenerationStatus] = useState({ isLoading: false, errorMessage: '' });
+
+           useEffect(() => {
+               FirebaseService.init(setAuthReady);
+           }, []);
+
+           useEffect(() => {
+               if (isAuthReady) {
+                   const unsubscribe = FirebaseService.subscribeToCustomChapters((newChapters) => {
+                       setStoryChapters(prevChapters => {
+                           const updatedChapters = [...prevChapters];
+                           newChapters.forEach(newCh => {
+                               if (!updatedChapters.some(ch => ch.id === newCh.id)) {
+                                   updatedChapters.push({
+                                       id: newCh.id,
+                                       title: newCh.title,
+                                       icon: "✨",
+                                       intro: newCh.intro,
+                                       markerPos: { top: `${Math.random() * 80 + 10}%`, left: `${Math.random() * 80 + 10}%` },
+                                       sections: [{ text: newCh.text, vizUpdate: { type: 'info', data: { text: "Dette kapitel er skabt af dig!", icon: "🌟" } } }]
+                                   });
+                               }
+                           });
+                           return updatedChapters;
+                       });
+                   });
+                   return () => unsubscribe();
+               }
+           }, [isAuthReady]);
+
+           const handleStartAdventure = () => {
+               setIsIntroVisible(false);
+           };
+
+           const handleOpenChapter = (index) => {
+               setCurrentChapterIndex(index);
+               setCurrentSectionIndex(-1);
+               setIsChapterPanelOpen(true);
+               setIsCustomizePanelOpen(false); // Luk tilpasningspanel, hvis åbent
+               setIsFullAdventureViewOpen(false); // Luk fuld eventyr-visning, hvis åben
+           };
+
+           const handleCloseChapterPanel = () => {
+               setIsChapterPanelOpen(false);
+           };
+
+           const handleNextSection = () => {
+               const chapter = storyChapters[currentChapterIndex];
+               if (currentSectionIndex < chapter.sections.length - 1) {
+                   setCurrentSectionIndex(prev => prev + 1);
+               } else {
+                   setIsChapterPanelOpen(false);
+               }
+           };
+
+           const handleOpenCustomizePanel = () => {
+               setIsCustomizePanelOpen(true);
+               setIsChapterPanelOpen(false); // Luk kapitelpanel, hvis åbent
+               setIsFullAdventureViewOpen(false); // Luk fuld eventyr-visning, hvis åben
+           };
+
+           const handleCloseCustomizePanel = () => {
+               setIsCustomizePanelOpen(false);
+           };
+
+           const handleOpenFullAdventureView = () => {
+               setIsFullAdventureViewOpen(true);
+               setIsChapterPanelOpen(false);
+               setIsCustomizePanelOpen(false);
+           };
+
+           const handleCloseFullAdventureView = () => {
+               setIsFullAdventureViewOpen(false);
+           };
+
+
+           const handleGenerateChapter = async () => {
+               setGenerationStatus({ isLoading: true, errorMessage: '' });
+               setGeneratedCustomChapter(null);
+
+               let customizationText = document.getElementById('custom-prompt-textarea').value.trim();
+               const selectedChoices = Array.from(document.querySelectorAll('#customize-panel .choice-btn.selected')).map(btn => btn.dataset.choice);
+
+               if (selectedChoices.length > 0) {
+                   customizationText += (customizationText ? "\n" : "") + "Brugeren ønsker også: " + selectedChoices.join(", ");
+               }
+
+               if (!customizationText) {
+                   setGenerationStatus({ isLoading: false, errorMessage: "Skriv venligst en idé eller vælg nogle muligheder." });
+                   return;
+               }
+
+               const prompt = `Skriv et børnevenligt kapitel til en godnathistorie om Luca, Gojo og Sukuna. Kapitlet skal være mindst 1 side langt og skrevet i et let forståeligt sprog. Luca er på en rejse med Gojo og Sukuna for at blive den største marine.
+Brugerens ønsker til kapitlet:
+${customizationText}
+Historien skal fortsætte i samme tone som tidligere kapitler.`;
+
+               let chatHistory = [];
+               chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+               const payload = { contents: chatHistory };
+               const apiKey = "";
+
+               const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+               try {
+                   const response = await fetch(apiUrl, {
+                       method: 'POST',
+                       headers: { 'Content-Type': 'application/json' },
+                       body: JSON.stringify(payload)
+                   });
+                   const result = await response.json();
+
+                   if (result.candidates && result.candidates.length > 0 &&
+                       result.candidates[0].content && result.candidates[0].content.parts &&
+                       result.candidates[0].content.parts.length > 0) {
+                       const generatedText = result.candidates[0].content.parts[0].text;
+                       setGeneratedCustomChapter({
+                           title: "Dit Tilpassede Kapitel",
+                           intro: "Et eventyr skabt af dine idéer!",
+                           text: generatedText,
+                           timestamp: new Date()
+                       });
+                       setGenerationStatus({ isLoading: false, errorMessage: '' });
+                   } else {
+                       setGenerationStatus({ isLoading: false, errorMessage: "Kunne ikke generere kapitel. Prøv venligst igen med en anden idé." });
+                       console.error("Uventet LLM-svarstruktur:", result);
+                   }
+               } catch (error) {
+                   setGenerationStatus({ isLoading: false, errorMessage: "Fejl ved generering af kapitel: " + error.message });
+                   console.error("Fejl ved LLM API-kald:", error);
+               }
+           };
+
+           const handleAddChapterToMap = async () => {
+               if (!generatedCustomChapter) {
+                   setGenerationStatus(prev => ({ ...prev, errorMessage: "Ingen kapitel at tilføje." }));
+                   return;
+               }
+
+               try {
+                   const chapterId = await FirebaseService.addGeneratedChapter(generatedCustomChapter);
+                   if (chapterId) {
+                       setStoryChapters(prevChapters => {
+                           const newChapter = {
+                               id: chapterId,
+                               title: generatedCustomChapter.title,
+                               icon: "✨",
+                               intro: generatedCustomChapter.intro,
+                               markerPos: { top: `${Math.random() * 80 + 10}%`, left: `${Math.random() * 80 + 10}%` },
+                               sections: [{ text: generatedCustomChapter.text, vizUpdate: { type: 'info', data: { text: "Dette kapitel er skabt af dig!", icon: "🌟" } } }]
+                           };
+                           return [...prevChapters, newChapter];
+                       });
+                       handleCloseCustomizePanel();
+                       setGeneratedCustomChapter(null); // Ryd genereret kapitel efter tilføjelse
+                       // Gem fremskridt efter tilføjelse af kapitel
+                       FirebaseService.saveUserProgress({ lastChapterId: chapterId, lastVisited: new Date() });
+                   }
+               } catch (e) {
+                   setGenerationStatus(prev => ({ ...prev, errorMessage: "Fejl ved lagring af kapitel: " + e.message }));
+               }
+           };
+
+           const resetCustomizationForm = useCallback(() => {
+               document.getElementById('custom-prompt-textarea').value = '';
+               document.querySelectorAll('#customize-panel .choice-btn').forEach(btn => {
+                   btn.classList.remove('selected', 'btn-coral');
+                   btn.classList.add('btn-ocean');
+               });
+               setGeneratedCustomChapter(null);
+               setGenerationStatus({ isLoading: false, errorMessage: '' });
+           }, []);
+
+           return (
+               <>
+                   <BackgroundCanvas />
+                   {isIntroVisible ? (
+                       <section id="intro-screen" className="flex-grow flex items-center justify-center p-8 text-center">
+                           <div className="max-w-2xl bg-white/70 p-6 rounded-xl shadow-lg backdrop-blur-sm fade-in">
+                               <h1 className="text-4xl md:text-6xl font-bold text-sea-deep mb-4">Gojo, Sukuna og det Store Hav</h1>
+                               <p className="text-lg md:text-xl text-sea-deep/80 mb-8">Et interaktivt eventyr for Luca. Følg med på en magisk rejse, lær af de bedste, og bliv den største marine, havet nogensinde har set.</p>
+                               <button onClick={handleStartAdventure} className="roblox-btn green">Start Eventyret</button>
+                           </div>
+                       </section>
+                   ) : (
+                       <main id="main-app" className="flex-grow relative w-full h-full min-h-screen">
+                           <DynamicWallpaper wallpaperData={wallpaperData} />
+                           <LucaAvatar />
+                           <div id="map-container" className="relative w-full h-full">
+                               {storyChapters.map((chapter, index) => (
+                                   <button
+                                       key={chapter.id || `chapter-${index}`}
+                                       className="map-marker absolute w-12 h-12 bg-sea-coral/80 backdrop-blur-sm rounded-full flex items-center justify-center text-white text-xl font-bold border-2 border-white shadow-lg"
+                                       style={{ top: chapter.markerPos.top, left: chapter.markerPos.left }}
+                                       onClick={() => handleOpenChapter(index)}
+                                   >
+                                       <span>{index + 1}</span>
+                                   </button>
+                               ))}
+                           </div>
+                           <div className="absolute bottom-4 left-4 flex flex-col gap-4 z-40">
+                               <button onClick={handleOpenCustomizePanel} className="roblox-btn py-3 px-6">Skab Dit Eget Eventyr</button>
+                               <button onClick={handleOpenFullAdventureView} className="roblox-btn green py-3 px-6">Se Hele Eventyret</button>
+                           </div>
+
+                           <ChapterPanel
+                               chapter={storyChapters[currentChapterIndex]}
+                               isOpen={isChapterPanelOpen}
+                               onClose={handleCloseChapterPanel}
+                               onNextSection={handleNextSection}
+                               currentSectionIndex={currentSectionIndex}
+                           />
+                           <CustomizePanel
+                               isOpen={isCustomizePanelOpen}
+                               onClose={handleCloseCustomizePanel}
+                               onGenerateChapter={handleGenerateChapter}
+                               onAddChapterToMap={handleAddChapterToMap}
+                               generationStatus={generationStatus}
+                               generatedChapterText={generatedCustomChapter?.text}
+                               errorMessage={generationStatus.errorMessage}
+                               onResetForm={resetCustomizationForm}
+                           />
+                           <FullAdventurePanel
+                               isOpen={isFullAdventureViewOpen}
+                               onClose={handleCloseFullAdventureView}
+                               chapters={storyChapters}
+                           />
+                       </main>
+                   )}
+               </>
+           );
+       };
+
+       ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+   </script>
+</body>
+</html>
